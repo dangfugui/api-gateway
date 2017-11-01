@@ -24,7 +24,6 @@ import org.springframework.stereotype.Component;
 import com.alibaba.fastjson.JSON;
 import com.alibaba.fastjson.JSONObject;
 import com.dang.api.gateway.common.ApiException;
-import com.dang.api.gateway.common.util.JsonUtil;
 
 /**
  * Description:
@@ -73,7 +72,7 @@ public class ApiGatewayHand implements InitializingBean,ApplicationContextAware{
     }
 
     private void returnResult(Object result, HttpServletResponse response) {
-        String resultJson = JsonUtil.toJson(result);
+        String resultJson = JSON.toJSONString(result);
         try {
             response.addHeader("Content-Type","application/json;charset=UTF-8");
             response.getOutputStream().write(resultJson.getBytes());
@@ -119,45 +118,33 @@ public class ApiGatewayHand implements InitializingBean,ApplicationContextAware{
 
     private Object[] buildParams(ApiStore.ApiRunable run, String paramsJson, HttpServletRequest request,
                              HttpServletResponse response) {
-        Map<String, Object> map = null;
+        JSONObject jsonObject;
         try {
-            map = JsonUtil.toMap(paramsJson);
+            jsonObject = JSON.parseObject(paramsJson);
         }catch (IllegalArgumentException e){
             throw new ApiException("调用失败：json字符串格式异常,请检查params参数");
-        }
-        if(map == null){
-            map = new HashMap<>();
         }
         Method method = run.targetMethod;
         List<String> paramNames = Arrays.asList(parameteUtil.getParameterNames(method));
         Class<?>[] paramTypes = method.getParameterTypes();
-        for(Map.Entry<String,Object> m : map.entrySet()){
-            if(!paramNames.contains(m.getKey())){
-                throw new ApiException("调用失败：接口不存在‘"+m.getKey()+"'参数");
-            }
-        }
+//        for(Map.Entry<String,Object> m : map.entrySet()){
+//            if(!paramNames.contains(m.getKey())){
+//                throw new ApiException("调用失败：接口不存在‘"+m.getKey()+"'参数");
+//            }
+//        }
         Object[] args = new Object[paramTypes.length];
         for(int i = 0;i<paramTypes.length ; i++){
             if(paramTypes[i].isAssignableFrom(HttpServletRequest.class)){
                 args[i] = request;
-            }else if (map.containsKey(paramNames.get(i))){
+            }else{
                 try {
-                    args[i] = converJsonToBean(paramNames.get(i), paramTypes[i]);
+                    args[i] = jsonObject.getObject(paramNames.get(i), paramTypes[i]);
                 }catch (Exception e){
                     throw new ApiException(String.format("调用失败：指定参数'{%s}'格式错误或值错误：",paramNames.get(i))+e.getMessage());
                 }
-            }else {
-                args[i] = null;
             }
-            return args;
         }
-
-        return null; //TODO
-    }
-
-    private Object converJsonToBean(String json, Class<?> paramType) {
-        JSONObject jsonObject = new JSONObject();
-        return jsonObject.getObject(json,paramType);
+        return args;
     }
 
 
